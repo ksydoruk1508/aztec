@@ -1,7 +1,18 @@
-Aztec Node Installer (RU/EN) — Docker-based
+# Aztec Node Installer (RU/EN) — Docker-based
 
 Bilingual, interactive Bash installer/manager for running an Aztec Node via Docker on Debian/Ubuntu.
 Версия скрипта / Script version: 1.4.0
+
+---
+
+## System Requirements
+
+- OS: Ubuntu 22.04+
+- CPU: 4
+- RAM: 8 GB
+- Disk space: **250 GB** recommended
+
+---
 
 English
 What this is
