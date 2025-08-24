@@ -27,6 +27,19 @@
 [![Version](https://img.shields.io/badge/Script-v1.4.0-0ea5e9)](#)
 [![License](https://img.shields.io/badge/License-MIT-8b5cf6)](#license)
 
+## Hardware Requirements (Practical)
+Get a VPS that meets the minimum specs below, then proceed to the next step.
+
+If you plan to run your own RPC, get a bigger VPS - Check specs first : RPC Setup Guide
+
+CPU            :   4 Core
+RAM           :   8GB
+Disk          :   250GB SSD
+OS            :   Linux or MacOS
+Network   :   25 Mbps up/down
+
+---
+
 **English** • [Русский](#русский)
 
 </div>
