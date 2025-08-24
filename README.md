@@ -32,7 +32,10 @@ Get a VPS that meets the minimum specs below, then proceed to the next step.
 
 If you plan to run your own RPC, get a bigger VPS - Check specs first : RPC Setup Guide
 
-CPU            :   4 Core
+
+---
+
+CPU           :   4 Core
 RAM           :   8GB
 Disk          :   250GB SSD
 OS            :   Linux or MacOS
