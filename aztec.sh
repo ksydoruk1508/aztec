@@ -162,7 +162,7 @@ tr() {
         m1_bootstrap) echo "Установка необходимых утилит" ;;
         m2_create) echo "Заполнение переменных" ;;
         m3_start) echo "Запустить ноду" ;;
-        m4_restart) echo "Перезапустить узел (docker compose restart)" ;;
+        m4_restart) echo "Перезапустить ноду" ;;
         m4_logs) echo "Смотреть логи" ;;
         m5_sync) echo "Проверить синхронизацию" ;;
         m6_rpc) echo "Проверить ваше RPC" ;;
