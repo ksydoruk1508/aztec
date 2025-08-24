@@ -42,7 +42,7 @@ If you plan to run your own RPC, get a bigger VPS - Check specs first : RPC Setu
 ## English
 
 ---
-
+## Requirements
 - CPU           :   4 Core
 - RAM           :   8GB
 - Disk          :   250GB SSD
