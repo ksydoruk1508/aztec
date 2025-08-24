@@ -331,13 +331,14 @@ restart_node() {
   if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
     err "$(tr docker_missing)"; return 1
   fi
-  cd "$AZTEC_DIR"
+  cd "$AZTEC_DIR" || { err "Aztec dir not found"; return 1; }
+
+  # Обязательно выполняем из каталога с docker-compose.yml и .env
   info "$(tr restarting)"
-  if ! docker compose restart; then
-    warn "compose restart failed, doing down/up..."
-    docker compose down || true
-    docker compose up -d
-  fi
+
+  # Пересоздаём только сервис ноды, чтобы применились новые переменные из .env
+  docker compose up -d --force-recreate --no-deps aztec-node
+
   ok "$(tr restarted)"
 }
 
