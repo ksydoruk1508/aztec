@@ -43,11 +43,11 @@ If you plan to run your own RPC, get a bigger VPS - Check specs first : RPC Setu
 
 ---
 
-CPU           :   4 Core
-RAM           :   8GB
-Disk          :   250GB SSD
-OS            :   Linux or MacOS
-Network   :   25 Mbps up/down
+- CPU           :   4 Core
+- RAM           :   8GB
+- Disk          :   250GB SSD
+- OS            :   Linux or MacOS
+- Network   :   25 Mbps up/down
 
 ---
 
