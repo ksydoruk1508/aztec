@@ -52,13 +52,19 @@ Quick start
 Run with Bash, not sh, to ensure colors and prompts render correctly.
 
 # 1) Download the script (adjust <user>/<repo> if needed)
+````markdown
 curl -fsSL https://raw.githubusercontent.com/ksydoruk1508/aztec/main/aztec.sh -o aztec.sh
+````
 
 # 2) Make it executable
+````markdown
 chmod +x aztec.sh
+````
 
 # 3) Run it (either as root, or with sudo available)
+````markdown
 bash ./aztec.sh
+````
 
 
 You’ll see a menu:
@@ -205,13 +211,19 @@ CONSENSUS_BEACON_URL — HTTP(S) URL Beacon RPC.
 Запускайте bash, а не sh, чтобы корректно работали цвета и подсказки.
 
 # 1) Скачать скрипт (замените <user>/<repo> при необходимости)
+````markdown
 curl -fsSL https://raw.githubusercontent.com/ksydoruk1508/aztec/main/aztec.sh -o aztec.sh
+````
 
 # 2) Сделать исполняемым
+````markdown
 chmod +x aztec.sh
+````
 
 # 3) Запустить (под root или с установленным sudo)
+````markdown
 bash ./aztec.sh
+````
 
 
 В меню доступны пункты:
