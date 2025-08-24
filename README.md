@@ -33,6 +33,14 @@ Get a VPS that meets the minimum specs below, then proceed to the next step.
 If you plan to run your own RPC, get a bigger VPS - Check specs first : RPC Setup Guide
 
 
+**English** • [Русский](#русский)
+
+</div>
+
+---
+
+## English
+
 ---
 
 CPU           :   4 Core
@@ -42,14 +50,6 @@ OS            :   Linux or MacOS
 Network   :   25 Mbps up/down
 
 ---
-
-**English** • [Русский](#русский)
-
-</div>
-
----
-
-## English
 
 ### ✨ What it does
 Bilingual, interactive **Bash** script that helps you run an **Aztec Node** via **Docker** on Ubuntu/Debian:
