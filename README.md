@@ -1,13 +1,4 @@
 Aztec Node Installer (RU/EN) — Docker-based
- _   _           _  _____      
-| \ | |         | ||____ |     
-|  \| | ___   __| |    / /_ __ 
-| . ` |/ _ \ / _` |    \ \ '__|
-| |\  | (_) | (_| |.___/ / |   
-\_| \_/\___/ \__,_|\____/|_|
-          Aztec
-     Канал: @NodesN3R
-
 
 Bilingual, interactive Bash installer/manager for running an Aztec Node via Docker on Debian/Ubuntu.
 Версия скрипта / Script version: 1.4.0
