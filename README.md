@@ -1,338 +1,255 @@
-# Aztec Node Installer (RU/EN) — Docker-based
+<!--
+  Aztec Node Installer — README
+  Script version: v1.4.0
+-->
 
-Bilingual, interactive Bash installer/manager for running an Aztec Node via Docker on Debian/Ubuntu.
-Версия скрипта / Script version: 1.4.0
+<div align="center">
+
+```
+ _   _           _  _____      
+| \ | |         | ||____ |     
+|  \| | ___   __| |    / /_ __ 
+| . ` |/ _ \ / _` |    \ \ '__|
+| |\  | (_) | (_| |.___/ / |   
+\_| \_/\___/ \__,_|\____/|_|
+          Aztec
+     Канал: @NodesN3R
+```
+
+# Aztec Node — Docker Installer (RU/EN)
+
+[![OS Ubuntu](https://img.shields.io/badge/OS-Ubuntu%20%2F%20Debian-E95420)](https://ubuntu.com/)
+[![Shell](https://img.shields.io/badge/Shell-bash-4EAA25)](https://www.gnu.org/software/bash/)
+[![Docker](https://img.shields.io/badge/Docker-required-2496ED)](https://www.docker.com/)
+[![Compose](https://img.shields.io/badge/Compose-plugin-1D63ED)](https://docs.docker.com/compose/)
+[![Arch](https://img.shields.io/badge/Arch-x86__64%20%2F%20arm64-6E56CF)](#)
+[![Lang](https://img.shields.io/badge/Lang-RU%20%7C%20EN-10b981)](#)
+[![Version](https://img.shields.io/badge/Script-v1.4.0-0ea5e9)](#)
+[![License](https://img.shields.io/badge/License-MIT-8b5cf6)](#license)
+
+**English** • [Русский](#русский)
+
+</div>
 
 ---
 
-## System Requirements
+## English
 
-- OS: Ubuntu 22.04+
-- CPU: 4
-- RAM: 8 GB
-- Disk space: **250 GB** recommended
+### ✨ What it does
+Bilingual, interactive **Bash** script that helps you run an **Aztec Node** via **Docker** on Ubuntu/Debian:
+
+- ☑️ One-click system prep: APT packages, **Docker**, **Compose plugin**, **UFW** rules  
+- 🧰 Creates `~/aztec`, builds `.env` interactively, writes ready-to-run `docker-compose.yml`  
+- ▶️ Starts the node, 📜 tails logs, 🩺 checks sync status & RPC health  
+- 🔁 Updates Aztec **image tag** right in compose  
+- 🧹 Full cleanup (containers, images, on-host data) with optional `.env` backup  
+- 🌍 RU/EN UI with colored output
+
+> Default image tag in compose: `aztecprotocol/aztec:1.2.1` (change via menu when needed)
 
 ---
 
-English
-What this is
+### 🚀 Quick start
 
-A single Bash script that:
+> Run with **bash** (not `sh`) to ensure colors and prompts render correctly.
 
-Installs prerequisites (APT deps, Docker, Docker Compose plugin) and configures UFW (opens 22/tcp, 40400/tcp+udp, 8080).
-
-Creates ~/aztec, interactively builds a .env, and writes a ready-to-run docker-compose.yml.
-
-Starts the Aztec node, tails logs, checks sync status and RPC health.
-
-Updates the Aztec image tag in compose on demand.
-
-Removes everything cleanly (containers, images, on-host data) with optional .env backup.
-
-Works in English and Russian, with colored output.
-
-Default image tag written to compose: aztecprotocol/aztec:1.2.1 (you can change it via the menu).
-
-Requirements
-
-Ubuntu/Debian with apt.
-
-Root or sudo privileges.
-
-Open network ports: 40400/tcp, 40400/udp, 8080 (UFW rules are applied by the script).
-
-Your own RPC endpoints:
-
-ETHEREUM_RPC_URL — Sepolia RPC HTTP(S) URL.
-
-CONSENSUS_BEACON_URL — Consensus Beacon RPC HTTP(S) URL.
-
-Quick start
-
-Run with Bash, not sh, to ensure colors and prompts render correctly.
-
-# 1) Download the script (adjust <user>/<repo> if needed)
-````markdown
+```bash
+# Download the script
 curl -fsSL https://raw.githubusercontent.com/ksydoruk1508/aztec/main/aztec.sh -o aztec.sh
-````
 
-# 2) Make it executable
-````markdown
+# Make executable
 chmod +x aztec.sh
-````
 
-# 3) Run it (either as root, or with sudo available)
-````markdown
+# Run
 bash ./aztec.sh
-````
+```
 
+---
 
-You’ll see a menu:
+### 🧭 Menu overview
 
-One-click setup (update packages, deps, Docker & UFW)
+1. **One-click setup** — update packages, install deps, Docker & UFW  
+2. **Create `./aztec`** — fill `.env`, write `docker-compose.yml`  
+3. **Start node** — `docker compose up -d`  
+4. **Follow logs** — live logs with `-fn 1000`  
+5. **Sync status** — community script (Cerberus-Node)  
+6. **RPC health** — community script (DeepPatel2412)  
+7. **Full removal** — containers, images & data; optional `.env` backup  
+8. **Update node version** — change image tag in compose and restart  
+9. **Show node version** — reads image tag from compose  
+10. **Change language** — RU/EN  
+11. **Exit**
 
-Create ./aztec, fill .env, and write docker-compose.yml
+---
 
-Start node (docker compose up -d)
+### 🔐 `.env` variables (asked interactively)
 
-Follow logs
+| Variable                | Description                                   |
+|-------------------------|-----------------------------------------------|
+| `ETHEREUM_RPC_URL`      | Sepolia RPC HTTP(S) URL                       |
+| `CONSENSUS_BEACON_URL`  | Consensus Beacon RPC HTTP(S) URL              |
+| `VALIDATOR_PRIVATE_KEYS`| **0x-prefixed private key** (keep safe!)      |
+| `COINBASE`              | Your L1 address (0x…)                         |
+| `P2P_IP`                | Your public IP (auto-detected if left blank)  |
 
-Sync status check (Cerberus-Node script)
+> **Security:** never commit `.env`. Consider:  
+> `chmod 600 ~/aztec/.env`
 
-Check your RPC health
+---
 
-Remove node, images & data (FULL)
+### 📂 Paths & data
 
-Update node version (edit image tag)
+- Work dir: `~/aztec`  
+- Compose: `~/aztec/docker-compose.yml`  
+- Env: `~/aztec/.env`  
+- On-host data (volume): `/root/.aztec/alpha-testnet/data/`
 
-Show node version (from compose)
+---
 
-Change language / Сменить язык
+### 🔧 Common commands
 
-Exit
+```bash
+# Start manually
+cd ~/aztec && docker compose up -d
 
-.env variables (asked interactively)
+# Logs
+cd ~/aztec && docker compose logs -fn 1000
 
-ETHEREUM_RPC_URL — Sepolia RPC endpoint.
+# Show current image tag (from compose)
+# (or use menu option #9)
+grep -E 'image:\s*aztecprotocol/aztec:' ~/aztec/docker-compose.yml
 
-CONSENSUS_BEACON_URL — Beacon RPC endpoint.
+# Update node (use menu #8) — enter e.g. 1.2.1 when prompted
 
-VALIDATOR_PRIVATE_KEYS — 0x-prefixed private key (keep safe!).
+# Full removal (use menu #7) — will offer to backup .env
+```
 
-COINBASE — your L1 address (0x...).
+---
 
-P2P_IP — your public IP (auto-detected if blank).
+### 🧯 Troubleshooting
 
-Security: never commit .env to version control. Consider restricting permissions:
+- **Colors show as `\e[0;34m`** → run with **bash**: `bash ./aztec.sh`  
+- **Docker missing** → use menu **1** (One-click setup)  
+- **UFW blocks SSH** → script allows `22/tcp` and `ssh`; verify `sudo ufw status`  
+- **Public RPC issues** → prefer a reliable provider endpoint
 
-chmod 600 ~/aztec/.env
+---
 
-Data & files layout
+### 🙏 Credits
 
-Working dir: ~/aztec
+- Sync status script — Cerberus-Node community  
+- RPC Health Check — DeepPatel2412
 
-Compose: ~/aztec/docker-compose.yml
+---
 
-Env: ~/aztec/.env
+## Русский
 
-On-host data (volume): /root/.aztec/alpha-testnet/data/
+### ✨ Что умеет
+Двуязычный интерактивный **Bash-скрипт** для запуска **Aztec-ноды** через **Docker** на Ubuntu/Debian:
 
-Common tasks
+- ☑️ Быстрая подготовка: APT-пакеты, **Docker**, **Compose-плагин**, правила **UFW**  
+- 🧰 Создаёт `~/aztec`, собирает `.env`, пишет готовый `docker-compose.yml`  
+- ▶️ Запускает ноду, 📜 показывает логи, 🩺 проверяет синхронизацию и RPC  
+- 🔁 Обновляет **тег образа** Aztec в compose  
+- 🧹 Полное удаление (контейнеры, образы, данные) с предложением сохранить `.env`  
+- 🌍 Интерфейс RU/EN с цветным выводом
 
-Start the node
+> Базовый тег образа в compose: `aztecprotocol/aztec:1.2.1` (меняется через меню)
 
-Menu → 3) Start node, or:
+---
 
-cd ~/aztec
-docker compose up -d
+### 🚀 Быстрый старт
 
+> Запускайте **bash** (не `sh`), чтобы корректно работали цвета и подсказки.
 
-View logs
-
-Menu → 4) Follow logs, or:
-
-cd ~/aztec
-docker compose logs -fn 1000
-
-
-Update Aztec image version
-
-Menu → 8) Update node version (edit image tag) → enter e.g. 1.2.1.
-
-Show current version (from compose)
-
-Menu → 9) Show node version (from compose).
-
-RPC health
-
-Menu → 6) Check your RPC health (runs a community health check script).
-
-Sync status
-
-Menu → 5) Sync status check (Cerberus-Node community script).
-
-Full removal (containers, images, data)
-
-Menu → 7) Remove node, images & data (FULL).
-You’ll be prompted to back up ~/aztec/.env as ~/aztec.env.<timestamp>.bak.
-
-Troubleshooting
-
-Colors printed like \e[0;34m instead of coloring → Run with bash (bash ./aztec.sh).
-
-Docker missing → Run menu item 1) One-click setup.
-
-Locked out by UFW → Script allows 22/tcp and SSH; verify sudo ufw status.
-
-Rate-limited public RPC → Use a dedicated provider endpoint.
-
-Credits
-
-Sync status: Cerberus-Node community script.
-
-RPC Health Check: DeepPatel2412.
-
-Русский
-
-Что это
-
-Интерактивный Bash-скрипт, который:
-
-Ставит зависимости (APT-пакеты, Docker, Docker Compose плагин) и настраивает UFW (открывает 22/tcp, 40400/tcp+udp, 8080).
-
-Создаёт ~/aztec, интерактивно собирает .env и генерирует готовый docker-compose.yml.
-
-Запускает ноду, показывает логи, проверяет синхронизацию и состояние RPC.
-
-Обновляет тег образа Aztec в compose по запросу.
-
-Полностью удаляет всё (контейнеры, образы, данные), предлагает сохранить .env.
-
-Работает на русском и английском, с цветным выводом.
-
-Базовый тег образа, записываемый в compose: aztecprotocol/aztec:1.2.1 (его можно сменить через меню).
-
-Требования
-
-Ubuntu/Debian с apt.
-
-Права root или sudo.
-
-Открытые порты: 40400/tcp, 40400/udp, 8080 (правила UFW применяются скриптом).
-
-Ваши RPC-эндпоинты:
-
-ETHEREUM_RPC_URL — HTTP(S) URL Sepolia RPC.
-
-CONSENSUS_BEACON_URL — HTTP(S) URL Beacon RPC.
-
-Быстрый старт
-
-Запускайте bash, а не sh, чтобы корректно работали цвета и подсказки.
-
-# 1) Скачать скрипт (замените <user>/<repo> при необходимости)
-````markdown
+```bash
+# Скачать скрипт
 curl -fsSL https://raw.githubusercontent.com/ksydoruk1508/aztec/main/aztec.sh -o aztec.sh
-````
 
-# 2) Сделать исполняемым
-````markdown
+# Выдать права на исполнение
 chmod +x aztec.sh
-````
 
-# 3) Запустить (под root или с установленным sudo)
-````markdown
+# Запустить
 bash ./aztec.sh
-````
+```
 
+---
 
-В меню доступны пункты:
+### 🧭 Обзор меню
 
-Установить за раз: обновление, зависимости, Docker и UFW
+1. **Установить за раз** — обновление, зависимости, Docker и UFW  
+2. **Создать `./aztec`** — заполнить `.env`, записать `docker-compose.yml`  
+3. **Запустить узел** — `docker compose up -d`  
+4. **Смотреть логи** — живые логи с `-fn 1000`  
+5. **Проверка синхронизации** — скрипт сообщества (Cerberus-Node)  
+6. **Проверка RPC** — скрипт сообщества (DeepPatel2412)  
+7. **Полное удаление** — контейнеры, образы и данные; опциональный бэкап `.env`  
+8. **Обновить версию ноды** — смена тега образа в compose и перезапуск  
+9. **Показать версию ноды** — чтение тега из compose  
+10. **Сменить язык** — RU/EN  
+11. **Выход**
 
-Создать ./aztec, заполнить .env и записать docker-compose.yml
+---
 
-Запустить узел (docker compose up -d)
+### 🔐 Переменные `.env`
 
-Смотреть логи
+| Переменная               | Назначение                                    |
+|--------------------------|-----------------------------------------------|
+| `ETHEREUM_RPC_URL`       | HTTP(S) адрес Sepolia RPC                     |
+| `CONSENSUS_BEACON_URL`   | HTTP(S) адрес Beacon RPC                      |
+| `VALIDATOR_PRIVATE_KEYS` | **Приватный ключ** с префиксом `0x`           |
+| `COINBASE`               | Ваш L1-адрес (0x…)                            |
+| `P2P_IP`                 | Ваш публичный IP (авто, если оставить пустым) |
 
-Проверить синхронизацию (скрипт Cerberus-Node)
+> **Безопасность:** не коммитьте `.env`. Рекомендуется:  
+> `chmod 600 ~/aztec/.env`
 
-Проверить ваше RPC
+---
 
-Полное удаление: контейнеры, образы и данные
+### 📂 Пути и данные
 
-Обновить версию ноды (заменить тег image)
+- Рабочая папка: `~/aztec`  
+- Compose: `~/aztec/docker-compose.yml`  
+- Env: `~/aztec/.env`  
+- Данные на хосте (volume): `/root/.aztec/alpha-testnet/data/`
 
-Показать версию ноды (из compose)
+---
 
-Сменить язык / Change language
+### 🔧 Частые команды
 
-Выход
+```bash
+# Старт вручную
+cd ~/aztec && docker compose up -d
 
-Переменные .env (спрашиваются по очереди)
+# Логи
+cd ~/aztec && docker compose logs -fn 1000
 
-ETHEREUM_RPC_URL — адрес Sepolia RPC.
+# Текущий тег образа (из compose)
+grep -E 'image:\s*aztecprotocol/aztec:' ~/aztec/docker-compose.yml
 
-CONSENSUS_BEACON_URL — адрес Beacon RPC.
+# Обновление версии ноды — пункт меню №8
 
-VALIDATOR_PRIVATE_KEYS — приватный ключ с префиксом 0x (храните в секрете!).
+# Полное удаление — пункт меню №7 (предложит сохранить .env)
+```
 
-COINBASE — ваш L1-адрес (0x...).
+---
 
-P2P_IP — ваш публичный IP (авто-детект, если оставить пустым).
+### 🧯 Решение проблем
 
-Безопасность: не коммитьте .env в репозиторий. Ограничьте права:
+- **Вместо цвета видны коды `\e[0;34m`** → запускайте **bash**: `bash ./aztec.sh`  
+- **Docker не установлен** → пункт меню **1**  
+- **UFW перекрыл SSH** → скрипт разрешает `22/tcp` и `ssh`; проверьте `sudo ufw status`  
+- **Публичные RPC нестабильны** → используйте надёжный провайдерский эндпоинт
 
-chmod 600 ~/aztec/.env
+---
 
-Где лежат файлы и данные
+### 🙏 Благодарности
 
-Рабочая папка: ~/aztec
+- Проверка синхронизации — скрипт сообщества Cerberus-Node  
+- Проверка RPC — скрипт сообщества DeepPatel2412
 
-Compose: ~/aztec/docker-compose.yml
+---
 
-Env: ~/aztec/.env
+## License
 
-Данные на хосте (volume): /root/.aztec/alpha-testnet/data/
-
-Частые операции
-
-Запуск ноды
-
-Меню → 3) Запустить узел, или:
-
-cd ~/aztec
-docker compose up -d
-
-
-Логи
-
-Меню → 4) Смотреть логи, или:
-
-cd ~/aztec
-docker compose logs -fn 1000
-
-
-Обновление версии образа Aztec
-
-Меню → 8) Обновить версию ноды → введите, например, 1.2.1.
-
-Показ версии (из compose)
-
-Меню → 9) Показать версию ноды.
-
-Проверка RPC
-
-Меню → 6) Проверить ваше RPC (комьюнити-скрипт проверки здоровья RPC).
-
-Проверка синхронизации
-
-Меню → 5) Проверить синхронизацию (скрипт Cerberus-Node).
-
-Полное удаление
-
-Меню → 7) Полное удаление: контейнеры, образы и данные.
-Будет предложено сохранить ~/aztec/.env в ~/aztec.env.<timestamp>.bak.
-
-Неполадки
-
-Вместо цвета видите \e[0;34m → запускайте bash (bash ./aztec.sh).
-
-Docker не найден → пункт меню 1) Установить за раз.
-
-UFW перекрыл доступ → скрипт разрешает 22/tcp и SSH; проверьте sudo ufw status.
-
-Публичные RPC лагают/режутся → используйте личные/провайдерские эндпоинты.
-
-Благодарности
-
-Проверка синка: комьюнити-скрипт Cerberus-Node.
-
-RPC Health Check: DeepPatel2412.
-
-Maintainers / Support
-
-Channel: @NodesN3R
-
-Pull requests and issues are welcome.
+MIT — see `LICENSE`. PRs and issues welcome 👋
