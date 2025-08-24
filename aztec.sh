@@ -155,7 +155,7 @@ tr() {
         m2_create) echo "Заполнение переменных" ;;
         m3_start) echo "Запустить ноду" ;;
         m4_logs) echo "Смотреть логи" ;;
-        m5_sync) echo "Проверить синхронизацию (скрипт Cerberus‑Node)" ;;
+        m5_sync) echo "Проверить синхронизацию" ;;
         m6_rpc) echo "Проверить ваше RPC" ;;
         m7_remove) echo "Удалить ноду" ;;
         m8_update) echo "Обновить версию ноды" ;;
