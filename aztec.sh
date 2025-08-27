@@ -3,7 +3,7 @@
 #  Aztec Node — RU/EN interactive installer/runner (Docker-based)
 #  Uses the requested ASCII logo. Bilingual menus & prompts.
 #  Target: Ubuntu/Debian (apt). Requires sudo privileges for installs.
-#  Version: 1.4.1
+#  Version: 1.4.2
 # =====================================================================
 set -Eeuo pipefail
 
@@ -46,7 +46,7 @@ hr()    { echo -e "${clrDim}─────────────────�
 # Configurable parameters
 # -----------------------------
 SCRIPT_NAME="AztecNode"
-SCRIPT_VERSION="1.4.1"
+SCRIPT_VERSION="1.4.2"
 
 AZTEC_DIR="$HOME/aztec"
 ENV_FILE="$AZTEC_DIR/.env"
@@ -99,20 +99,21 @@ tr() {
         compose_saved) echo "docker-compose.yml saved" ;;
         starting) echo "Starting Aztec node (docker compose up -d)..." ;;
         started) echo "Aztec node started" ;;
-        restarting) echo "Restarting Aztec node..." ;;
+        restarting) echo "Applying .env and restarting Aztec node..." ;;
         restarted) echo "Aztec node restarted" ;;
         logs_hint) echo "Showing live logs (last 1000 lines). Press Ctrl+C to stop viewing." ;;
         menu_title) echo "Aztec Node — Installer & Manager" ;;
         m1_bootstrap) echo "One-click setup: update packages, deps, Docker & UFW" ;;
         m2_create) echo "Create ./aztec, fill .env, and write docker-compose.yml" ;;
         m3_start) echo "Start node (docker compose up -d)" ;;
-        m4_restart) echo "Restart node (docker compose restart)" ;;
+        m4_restart) echo "Restart node (apply .env)" ;;
         m4_logs) echo "Follow logs" ;;
         m5_sync) echo "Run sync status check (Cerberus-Node)" ;;
         m6_rpc) echo "Check your RPC health" ;;
         m7_remove) echo "Remove node, images & data (FULL)" ;;
         m8_update) echo "Update node version (edit image tag)" ;;
         m9_showver) echo "Show node version (from compose)" ;;
+        m11_peerid) echo "Show Peer ID" ;;
         m10_lang) echo "Change language / Сменить язык" ;;
         m11_exit) echo "Exit" ;;
         press_enter) echo "Press Enter to return to menu..." ;;
@@ -132,6 +133,9 @@ tr() {
         compose_line_missing) echo "Image line not found in compose. Aborting." ;;
         current_version) echo "Current image tag:" ;;
         not_found) echo "not found" ;;
+        peerid_fetch) echo "Extracting Peer ID from logs..." ;;
+        peerid_label) echo "Peer ID:" ;;
+        peerid_notfound) echo "Peer ID not found yet. Make sure the node has logged 'DiscV5 service started'." ;;
       esac
       ;;
     *)
@@ -155,20 +159,21 @@ tr() {
         compose_saved) echo "docker-compose.yml сохранён" ;;
         starting) echo "Запускаю узел (docker compose up -d)..." ;;
         started) echo "Узел запущен" ;;
-        restarting) echo "Перезапускаю узел Aztec..." ;;
+        restarting) echo "Применяю .env и перезапускаю узел Aztec..." ;;
         restarted) echo "Узел перезапущен" ;;
         logs_hint) echo "Показываю логи (последние 1000 строк). Нажмите Ctrl+C для выхода." ;;
         menu_title) echo "Aztec Node — установщик и менеджер" ;;
         m1_bootstrap) echo "Установка необходимых утилит" ;;
         m2_create) echo "Заполнение переменных" ;;
         m3_start) echo "Запустить ноду" ;;
-        m4_restart) echo "Перезапустить ноду" ;;
+        m4_restart) echo "Перезапустить ноду (применить .env)" ;;
         m4_logs) echo "Смотреть логи" ;;
         m5_sync) echo "Проверить синхронизацию" ;;
         m6_rpc) echo "Проверить ваше RPC" ;;
         m7_remove) echo "Удалить ноду" ;;
         m8_update) echo "Обновить версию ноды" ;;
         m9_showver) echo "Показать версию ноды" ;;
+        m11_peerid) echo "Показать Peer ID" ;;
         m10_lang) echo "Сменить язык / Change language" ;;
         m11_exit) echo "Выход" ;;
         press_enter) echo "Нажмите Enter для возврата в меню..." ;;
@@ -188,6 +193,9 @@ tr() {
         compose_line_missing) echo "Строка image не найдена в compose. Останавливаюсь." ;;
         current_version) echo "Текущий тег image:" ;;
         not_found) echo "не найдено" ;;
+        peerid_fetch) echo "Ищу Peer ID в логах..." ;;
+        peerid_label) echo "Peer ID:" ;;
+        peerid_notfound) echo "Peer ID пока не найден. Убедитесь, что в логах появилась строка 'DiscV5 service started'." ;;
       esac
       ;;
   esac
@@ -325,7 +333,7 @@ start_node() {
 }
 
 # -----------------------------
-# Restart node
+# Restart node (apply .env)
 # -----------------------------
 restart_node() {
   if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
@@ -333,12 +341,8 @@ restart_node() {
   fi
   cd "$AZTEC_DIR" || { err "Aztec dir not found"; return 1; }
 
-  # Обязательно выполняем из каталога с docker-compose.yml и .env
   info "$(tr restarting)"
-
-  # Пересоздаём только сервис ноды, чтобы применились новые переменные из .env
   docker compose up -d --force-recreate --no-deps aztec-node
-
   ok "$(tr restarted)"
 }
 
@@ -362,6 +366,26 @@ run_sync_check() {
 # -----------------------------
 check_rpc_health() {
   info "$(tr rpc_running)"; run "bash <(curl -Ls https://raw.githubusercontent.com/DeepPatel2412/Aztec-Tools/main/RPC%20Health%20Check)"
+}
+
+# -----------------------------
+# View Peer ID
+# -----------------------------
+view_peer_id() {
+  if ! command -v docker >/dev/null 2>&1; then err "$(tr docker_missing)"; return 1; fi
+  info "$(tr peerid_fetch)"
+  local cid
+  cid=$(docker ps -q --filter "name=aztec" | head -1 || true)
+  if [[ -z "${cid:-}" ]]; then
+    warn "$(tr dir_missing): no running aztec container"; return 1
+  fi
+  local pid
+  pid=$(docker logs "$cid" 2>&1 | grep -m 1 -ai 'DiscV5 service started' | grep -o '"peerId":"[^"]*"' | cut -d'"' -f4 || true)
+  if [[ -n "${pid:-}" ]]; then
+    printf "%b%s%b %b%s%b\n" "$clrBold" "$(tr peerid_label)" "$clrReset" "$clrBlue" "$pid" "$clrReset"
+  else
+    warn "$(tr peerid_notfound)"
+  fi
 }
 
 # -----------------------------
@@ -443,8 +467,9 @@ main_menu() {
     echo -e "${clrGreen}8)${clrReset} $(tr m7_remove)"
     echo -e "${clrGreen}9)${clrReset} $(tr m8_update)"
     echo -e "${clrGreen}10)${clrReset} $(tr m9_showver)"
-    echo -e "${clrGreen}11)${clrReset} $(tr m10_lang)"
-    echo -e "${clrGreen}12)${clrReset} $(tr m11_exit)"
+    echo -e "${clrGreen}11)${clrReset} $(tr m11_peerid)"
+    echo -e "${clrGreen}12)${clrReset} $(tr m10_lang)"
+    echo -e "${clrGreen}13)${clrReset} $(tr m11_exit)"
     hr
     read -rp "> " choice
     case "${choice:-}" in
@@ -458,8 +483,9 @@ main_menu() {
       8) remove_node ;;
       9) update_node_version ;;
       10) show_node_version ;;
-      11) choose_language ;;
-      12) exit 0 ;;
+      11) view_peer_id ;;
+      12) choose_language ;;
+      13) exit 0 ;;
       *) ;;
     esac
     echo -e "\n$(tr press_enter)"; read -r
