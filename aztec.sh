@@ -3,20 +3,20 @@
 #  Aztec Node — RU/EN interactive installer/runner (Docker-based)
 #  Uses the requested ASCII logo. Bilingual menus & prompts.
 #  Target: Ubuntu/Debian (apt). Requires sudo privileges for installs.
-#  Version: 1.4.2
+#  Version: 1.5.0
 # =====================================================================
 set -Eeuo pipefail
 
 # -----------------------------
-# Branding / Logo (keep as requested)
+# Branding / Logo
 # -----------------------------
 display_logo() {
   cat <<'EOF'
- _   _           _  _____      
-| \ | |         | ||____ |     
-|  \| | ___   __| |    / /_ __ 
+ _   _           _  _____
+| \ | |         | ||____ |
+|  \| | ___   __| |    / /_ __
 | . ` |/ _ \ / _` |    \ \ '__|
-| |\  | (_) | (_| |.___/ / |   
+| |\  | (_) | (_| |.___/ / |
 \_| \_/\___/ \__,_|\____/|_|
           Aztec
      Канал: @NodesN3R
@@ -24,7 +24,7 @@ EOF
 }
 
 # -----------------------------
-# Colors (robust)
+# Colors
 # -----------------------------
 clrGreen=$'\033[0;32m'
 clrCyan=$'\033[0;36m'
@@ -43,23 +43,24 @@ err()   { echo -e "${clrRed}[ERROR]${clrReset} ${*:-}"; }
 hr()    { echo -e "${clrDim}────────────────────────────────────────────────────────${clrReset}"; }
 
 # -----------------------------
-# Configurable parameters
+# Config
 # -----------------------------
 SCRIPT_NAME="AztecNode"
-SCRIPT_VERSION="1.4.2"
+SCRIPT_VERSION="1.5.0"
 
 AZTEC_DIR="$HOME/aztec"
 ENV_FILE="$AZTEC_DIR/.env"
 COMPOSE_FILE="$AZTEC_DIR/docker-compose.yml"
-HOST_DATA_DIR="/root/.aztec/alpha-testnet/data"  # from compose volume mapping
+HOST_DATA_BASE="/root/.aztec"
 
-# Default image tag baseline (will be written into compose initially)
-AZTEC_IMAGE="aztecprotocol/aztec:1.2.1"
+# текущий дефолт
+DEFAULT_IMAGE_TAG="2.0.2"
+DEFAULT_NETWORK="testnet"   # можно будет выбрать
 
 # -----------------------------
 # Language (RU/EN)
 # -----------------------------
-LANG_CHOICE="ru"  # default
+LANG_CHOICE="ru"
 
 choose_language() {
   clear; display_logo
@@ -74,7 +75,6 @@ choose_language() {
 }
 
 tr() {
-  # safe even with set -u
   local k="${1-}"
   [[ -z "$k" ]] && return 0
   case "$LANG_CHOICE" in
@@ -95,107 +95,127 @@ tr() {
         ask_priv) echo "Enter VALIDATOR_PRIVATE_KEYS (0x-prefixed private key):" ;;
         ask_coinbase) echo "Enter COINBASE (your L1 address):" ;;
         ask_p2p) echo "Enter P2P_IP (your public IP; leave blank to auto-detect):" ;;
+        ask_network) echo "Choose network: 1) testnet  2) alpha-testnet" ;;
         env_saved) echo ".env saved" ;;
         compose_saved) echo "docker-compose.yml saved" ;;
-        starting) echo "Starting Aztec node (docker compose up -d)..." ;;
+        starting) echo "Starting Aztec node..." ;;
         started) echo "Aztec node started" ;;
-        restarting) echo "Applying .env and restarting Aztec node..." ;;
+        restarting) echo "Restarting Aztec node..." ;;
         restarted) echo "Aztec node restarted" ;;
-        logs_hint) echo "Showing live logs (last 1000 lines). Press Ctrl+C to stop viewing." ;;
+        logs_hint) echo "Showing live logs (last 1000 lines). Ctrl+C to exit." ;;
         menu_title) echo "Aztec Node — Installer & Manager" ;;
-        m1_bootstrap) echo "One-click setup: update packages, deps, Docker & UFW" ;;
-        m2_create) echo "Create ./aztec, fill .env, and write docker-compose.yml" ;;
-        m3_start) echo "Start node (docker compose up -d)" ;;
+        m1_bootstrap) echo "Bootstrap system deps" ;;
+        m2_create) echo "Create .env and compose" ;;
+        m3_start) echo "Start node" ;;
         m4_restart) echo "Restart node (apply .env)" ;;
         m4_logs) echo "Follow logs" ;;
-        m5_sync) echo "Run sync status check (Cerberus-Node)" ;;
-        m6_rpc) echo "Check your RPC health" ;;
-        m7_remove) echo "Remove node, images & data (FULL)" ;;
-        m8_update) echo "Update node version (edit image tag)" ;;
-        m9_showver) echo "Show node version (from compose)" ;;
+        m5_sync) echo "Check sync" ;;
+        m6_rpc) echo "Check RPC health" ;;
+        m7_remove) echo "Remove node (FULL)" ;;
+        m8_update) echo "Update node version" ;;
+        m9_showver) echo "Show node version" ;;
         m11_peerid) echo "Show Peer ID" ;;
-        m10_lang) echo "Change language / Сменить язык" ;;
+        m10_lang) echo "Change language" ;;
         m11_exit) echo "Exit" ;;
         press_enter) echo "Press Enter to return to menu..." ;;
-        sync_running) echo "Running sync status script..." ;;
+        sync_running) echo "Running sync status..." ;;
         rpc_running) echo "Running RPC health check..." ;;
         need_root_warn) echo "Some steps require sudo/root. You'll be prompted when needed." ;;
-        docker_missing) echo "Docker is not available. Please run the one-click setup first." ;;
-        remove_confirm) echo "This will stop containers, remove volumes, images and delete data. Type 'yes' to confirm:" ;;
-        keep_env_q) echo "Keep .env as backup? [Y/n]:" ;;
+        docker_missing) echo "Docker not available. Run bootstrap first." ;;
+        remove_confirm) echo "This will stop containers, remove volumes, images and data. Type 'yes' to confirm:" ;;
+        keep_env_q) echo "Keep .env backup? [Y/n]:" ;;
         backup_saved) echo "Backup saved to" ;;
-        removed_ok) echo "Aztec completely removed" ;;
+        removed_ok) echo "Aztec removed" ;;
         cancelled) echo "Cancelled" ;;
         dir_missing) echo "Directory not found" ;;
         compose_missing) echo "docker-compose.yml not found" ;;
-        update_prompt) echo "Enter target Aztec image version (e.g. 1.2.1):" ;;
+        update_prompt_ver) echo "Enter target image version (e.g. 2.0.2):" ;;
+        update_prompt_net) echo "Choose network for update: 1) testnet  2) alpha-testnet" ;;
         update_done) echo "Compose updated and node restarted" ;;
-        compose_line_missing) echo "Image line not found in compose. Aborting." ;;
         current_version) echo "Current image tag:" ;;
         not_found) echo "not found" ;;
         peerid_fetch) echo "Extracting Peer ID from logs..." ;;
         peerid_label) echo "Peer ID:" ;;
-        peerid_notfound) echo "Peer ID not found yet. Make sure the node has logged 'DiscV5 service started'." ;;
+        peerid_notfound) echo "Peer ID not found yet." ;;
+        12_rpcmenu) echo "Change RPC" ;;
+        rpc_eth_prompt) echo "New Sepolia RPC (ETHEREUM_RPC_URL):" ;;
+        rpc_beacon_prompt) echo "New Sepolia Beacon RPC (CONSENSUS_BEACON_URL):" ;;
+        rpc_updated) echo "RPC updated" ;;
+        rpc_cancelled) echo "Empty input. No changes." ;;
+        rpc_menu_title) echo "RPC change" ;;
+        rpc_menu_1) echo "Change Sepolia RPC" ;;
+        rpc_menu_2) echo "Change Sepolia Beacon RPC URL" ;;
+        rpc_menu_back) echo "Back" ;;
       esac
       ;;
     *)
       case "$k" in
         root_enabled) echo "• Root Access Enabled ✔" ;;
         updating) echo "Обновляю пакеты..." ;;
-        installing_deps) echo "Устанавливаю базовые зависимости..." ;;
-        deps_done) echo "Базовые зависимости установлены" ;;
-        docker_setup) echo "Устанавливаю Docker (движок + compose-плагин)..." ;;
+        installing_deps) echo "Ставлю зависимости..." ;;
+        deps_done) echo "Готово" ;;
+        docker_setup) echo "Ставлю Docker и compose..." ;;
         docker_done) echo "Docker установлен" ;;
-        ufw_setup) echo "Настраиваю firewall (UFW)..." ;;
-        ufw_warn_enable) echo "Будет включён UFW; убедитесь, что SSH (22) разрешён, иначе потеряете доступ." ;;
-        ufw_done) echo "Правила файрвола применены" ;;
-        make_dir) echo "Создаю и перехожу в директорию ./aztec" ;;
+        ufw_setup) echo "Настраиваю UFW..." ;;
+        ufw_warn_enable) echo "UFW будет включен. Убедись, что порт 22 открыт, иначе потеряешь доступ." ;;
+        ufw_done) echo "Правила применены" ;;
+        make_dir) echo "Создаю каталог ./aztec и перехожу в него" ;;
         ask_eth_rpc) echo "Введите Sepolia RPC (ETHEREUM_RPC_URL):" ;;
         ask_beacon) echo "Введите Beacon RPC (CONSENSUS_BEACON_URL):" ;;
-        ask_priv) echo "Введите VALIDATOR_PRIVATE_KEYS (приватник с префиксом 0x):" ;;
+        ask_priv) echo "Введите VALIDATOR_PRIVATE_KEYS (с префиксом 0x):" ;;
         ask_coinbase) echo "Введите COINBASE (ваш L1 адрес):" ;;
-        ask_p2p) echo "Введите P2P_IP (ваш публичный IP; оставьте пустым для автоопределения):" ;;
-        env_saved) echo ".env сохранён" ;;
-        compose_saved) echo "docker-compose.yml сохранён" ;;
-        starting) echo "Запускаю узел (docker compose up -d)..." ;;
-        started) echo "Узел запущен" ;;
-        restarting) echo "Применяю .env и перезапускаю узел Aztec..." ;;
-        restarted) echo "Узел перезапущен" ;;
-        logs_hint) echo "Показываю логи (последние 1000 строк). Нажмите Ctrl+C для выхода." ;;
+        ask_p2p) echo "Введите P2P_IP (публичный IP, можно пусто для авто):" ;;
+        ask_network) echo "Выберите сеть: 1) testnet  2) alpha-testnet" ;;
+        env_saved) echo ".env сохранен" ;;
+        compose_saved) echo "docker-compose.yml сохранен" ;;
+        starting) echo "Запускаю ноду..." ;;
+        started) echo "Нода запущена" ;;
+        restarting) echo "Перезапускаю ноду..." ;;
+        restarted) echo "Нода перезапущена" ;;
+        logs_hint) echo "Показываю логи (1000 строк). Ctrl+C для выхода." ;;
         menu_title) echo "Aztec Node — установщик и менеджер" ;;
-        m1_bootstrap) echo "Установка необходимых утилит" ;;
-        m2_create) echo "Заполнение переменных" ;;
+        m1_bootstrap) echo "Установка утилит" ;;
+        m2_create) echo "Создать .env и compose" ;;
         m3_start) echo "Запустить ноду" ;;
-        m4_restart) echo "Перезапустить ноду (применить .env)" ;;
+        m4_restart) echo "Перезапустить ноду" ;;
         m4_logs) echo "Смотреть логи" ;;
         m5_sync) echo "Проверить синхронизацию" ;;
-        m6_rpc) echo "Проверить ваше RPC" ;;
-        m7_remove) echo "Удалить ноду" ;;
+        m6_rpc) echo "Проверить RPC" ;;
+        m7_remove) echo "Удалить ноду (полностью)" ;;
         m8_update) echo "Обновить версию ноды" ;;
-        m9_showver) echo "Показать версию ноды" ;;
+        m9_showver) echo "Показать версию" ;;
         m11_peerid) echo "Показать Peer ID" ;;
-        m10_lang) echo "Сменить язык / Change language" ;;
+        m10_lang) echo "Сменить язык" ;;
         m11_exit) echo "Выход" ;;
-        press_enter) echo "Нажмите Enter для возврата в меню..." ;;
-        sync_running) echo "Запускаю скрипт проверки синхронизации..." ;;
-        rpc_running) echo "Запускаю проверку здоровья RPC..." ;;
-        need_root_warn) echo "Некоторые шаги требуют sudo/root. Вас попросят ввести пароль при необходимости." ;;
-        docker_missing) echo "Docker недоступен. Сначала выполните установку одним шагом." ;;
-        remove_confirm) echo "Будут остановлены контейнеры, удалены тома, образы и данные. Введите 'yes' для подтверждения:" ;;
+        press_enter) echo "Enter для возврата в меню..." ;;
+        sync_running) echo "Запускаю проверку синхронизации..." ;;
+        rpc_running) echo "Запускаю проверку RPC..." ;;
+        need_root_warn) echo "Некоторые шаги требуют sudo/root." ;;
+        docker_missing) echo "Docker недоступен. Сначала установи зависимости." ;;
+        remove_confirm) echo "Будут удалены контейнеры, образы, тома и данные. Введи yes для подтверждения:" ;;
         keep_env_q) echo "Сохранить .env в бэкап? [Y/n]:" ;;
-        backup_saved) echo "Бэкап сохранён по пути" ;;
-        removed_ok) echo "Aztec полностью удалён" ;;
+        backup_saved) echo "Бэкап сохранен в" ;;
+        removed_ok) echo "Aztec удален" ;;
         cancelled) echo "Отменено" ;;
         dir_missing) echo "Каталог не найден" ;;
         compose_missing) echo "Файл docker-compose.yml не найден" ;;
-        update_prompt) echo "Введите целевую версию образа Aztec (например 1.2.1):" ;;
-        update_done) echo "Compose обновлён и нода перезапущена" ;;
-        compose_line_missing) echo "Строка image не найдена в compose. Останавливаюсь." ;;
-        current_version) echo "Текущий тег image:" ;;
+        update_prompt_ver) echo "Введите версию образа (например 2.0.2):" ;;
+        update_prompt_net) echo "Выберите сеть для обновления: 1) testnet  2) alpha-testnet" ;;
+        update_done) echo "Compose обновлен и нода перезапущена" ;;
+        current_version) echo "Текущий тег:" ;;
         not_found) echo "не найдено" ;;
         peerid_fetch) echo "Ищу Peer ID в логах..." ;;
         peerid_label) echo "Peer ID:" ;;
-        peerid_notfound) echo "Peer ID пока не найден. Убедитесь, что в логах появилась строка 'DiscV5 service started'." ;;
+        peerid_notfound) echo "Peer ID пока не найден." ;;
+        m12_rpcmenu) echo "Сменить RPC" ;;
+        rpc_eth_prompt) echo "Новый Sepolia RPC (ETHEREUM_RPC_URL):" ;;
+        rpc_beacon_prompt) echo "Новый Sepolia Beacon RPC (CONSENSUS_BEACON_URL):" ;;
+        rpc_updated) echo "RPC обновлен" ;;
+        rpc_cancelled) echo "Пусто. Изменений нет." ;;
+        rpc_menu_title) echo "Смена RPC" ;;
+        rpc_menu_1) echo "Сменить Sepolia RPC" ;;
+        rpc_menu_2) echo "Сменить Sepolia Beacon RPC URL" ;;
+        rpc_menu_back) echo "Назад" ;;
       esac
       ;;
   esac
@@ -206,12 +226,29 @@ tr() {
 # -----------------------------
 need_sudo() {
   if [[ $(id -u) -ne 0 ]] && ! command -v sudo >/dev/null 2>&1; then
-    err "sudo не найден. Запустите под root или установите sudo."
+    err "sudo не найден. запусти под root или поставь sudo."
     exit 1
   fi
 }
-run() {
-  if [[ $(id -u) -ne 0 ]]; then sudo bash -lc "$*"; else bash -lc "$*"; fi
+
+run() { if [[ $(id -u) -ne 0 ]]; then sudo bash -lc "$*"; else bash -lc "$*"; fi; }
+
+sanitize_yaml() {
+  local f="$1"
+  # убрать CRLF, затем выкинуть не-UTF8
+  sed -i 's/\r$//' "$f" || true
+  iconv -f utf-8 -t utf-8 -c "$f" -o "$f.tmp" && mv "$f.tmp" "$f"
+}
+
+choose_network() {
+  local def="${1:-$DEFAULT_NETWORK}"
+  echo -e "${clrBold}$(tr ask_network)${clrReset} [${def}]"
+  read -rp "> " ans
+  case "${ans:-}" in
+    2|alpha|alpha-testnet) echo "alpha-testnet" ;;
+    ""|1|testnet) echo "testnet" ;;
+    *) echo "$def" ;;
+  esac
 }
 
 # -----------------------------
@@ -221,12 +258,12 @@ update_and_deps() {
   echo "$(tr root_enabled)"
   info "$(tr updating)"; run "apt-get update && apt-get upgrade -y"
   info "$(tr installing_deps)"
-  run "apt-get install -y curl iptables build-essential git wget lz4 jq make gcc nano automake autoconf tmux htop nvme-cli libgbm1 pkg-config libssl-dev libleveldb-dev tar clang bsdmainutils ncdu unzip ufw screen gawk"
+  run "apt-get install -y curl iptables build-essential git wget lz4 jq make gcc nano automake autoconf tmux htop nvme-cli libgbm1 pkg-config libssl-dev libleveldb-dev tar clang bsdmainutils ncdu unzip ufw screen gawk iconv"
   ok "$(tr deps_done)"
 }
 
 # -----------------------------
-# Docker install (engine + compose plugin)
+# Docker
 # -----------------------------
 install_docker() {
   info "$(tr docker_setup)"; need_sudo
@@ -243,7 +280,7 @@ install_docker() {
 }
 
 # -----------------------------
-# Firewall (UFW)
+# Firewall
 # -----------------------------
 setup_firewall() {
   info "$(tr ufw_setup)"; need_sudo
@@ -257,34 +294,79 @@ setup_firewall() {
 }
 
 # -----------------------------
-# One-click bootstrap (1–3 combined)
+# Compose writer by template
 # -----------------------------
-bootstrap_setup() {
-  update_and_deps
-  install_docker
-  setup_firewall
+write_compose() {
+  local image_tag="$1"
+  local network="$2"
+  local host_data_dir="$HOST_DATA_BASE/$network/data"
+
+  mkdir -p "$AZTEC_DIR"
+  cat > "$COMPOSE_FILE" <<YAML
+services:
+  aztec-node:
+    container_name: aztec-sequencer
+    image: aztecprotocol/aztec:${image_tag}
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      ETHEREUM_HOSTS: \${ETHEREUM_RPC_URL}
+      L1_CONSENSUS_HOST_URLS: \${CONSENSUS_BEACON_URL}
+      DATA_DIRECTORY: /data
+      VALIDATOR_PRIVATE_KEYS: \${VALIDATOR_PRIVATE_KEYS}
+      COINBASE: \${COINBASE}
+      P2P_IP: \${P2P_IP}
+      LOG_LEVEL: info
+    entrypoint: >
+      sh -c 'node --no-warnings /usr/src/yarn-project/aztec/dest/bin/index.js start --network ${network} --node --archiver --sequencer'
+    ports:
+      - 40400:40400/tcp
+      - 40400:40400/udp
+      - 8080:8080
+    volumes:
+      - ${host_data_dir}:/data
+YAML
+  sanitize_yaml "$COMPOSE_FILE"
+  ok "$(tr compose_saved)"
+}
+
+# безопасно обновляет/добавляет переменную в .env
+update_env_var() {
+  local key="$1"; shift
+  local val="$*"
+  mkdir -p "$(dirname "$ENV_FILE")"
+  touch "$ENV_FILE"
+  # убрать CRLF
+  sed -i 's/\r$//' "$ENV_FILE" || true
+  # экранируем спецсимволы для sed (& и разделитель)
+  local esc; esc=$(printf '%s' "$val" | sed -e 's/[&@]/\\&/g')
+  if grep -qE "^${key}=" "$ENV_FILE"; then
+    sed -i -E "s@^${key}=.*@${key}=${esc}@" "$ENV_FILE"
+  else
+    printf "%s=%s\n" "$key" "$val" >> "$ENV_FILE"
+  fi
 }
 
 # -----------------------------
 # Create dir, ask .env, write compose
 # -----------------------------
-create_dir_and_env_and_compose() {
+create_dir_env_compose() {
   info "$(tr make_dir)"; hr
   mkdir -p "$AZTEC_DIR"; cd "$AZTEC_DIR"
 
   local ETHEREUM_RPC_URL="" CONSENSUS_BEACON_URL="" VALIDATOR_PRIVATE_KEYS="" COINBASE="" P2P_IP=""
   if [[ -f "$ENV_FILE" ]]; then
     set -a; source "$ENV_FILE" || true; set +a
-    ETHEREUM_RPC_URL="${ETHEREUM_RPC_URL:-}"; CONSENSUS_BEACON_URL="${CONSENSUS_BEACON_URL:-}"
-    VALIDATOR_PRIVATE_KEYS="${VALIDATOR_PRIVATE_KEYS:-}"; COINBASE="${COINBASE:-}"; P2P_IP="${P2P_IP:-}"
   fi
 
-  read -rp "${clrBold}$(tr ask_eth_rpc)${clrReset} ${ETHEREUM_RPC_URL:+[$ETHEREUM_RPC_URL]} " ans; ETHEREUM_RPC_URL="${ans:-${ETHEREUM_RPC_URL}}"
-  read -rp "${clrBold}$(tr ask_beacon)${clrReset} ${CONSENSUS_BEACON_URL:+[$CONSENSUS_BEACON_URL]} " ans; CONSENSUS_BEACON_URL="${ans:-${CONSENSUS_BEACON_URL}}"
-  read -rp "${clrBold}$(tr ask_priv)${clrReset} ${VALIDATOR_PRIVATE_KEYS:+[***hidden***]} " ans; VALIDATOR_PRIVATE_KEYS="${ans:-${VALIDATOR_PRIVATE_KEYS}}"
-  read -rp "${clrBold}$(tr ask_coinbase)${clrReset} ${COINBASE:+[$COINBASE]} " ans; COINBASE="${ans:-${COINBASE}}"
+  read -rp "${clrBold}$(tr ask_eth_rpc)${clrReset} ${ETHEREUM_RPC_URL:+[$ETHEREUM_RPC_URL]} " ans; ETHEREUM_RPC_URL="${ans:-${ETHEREUM_RPC_URL:-}}"
+  read -rp "${clrBold}$(tr ask_beacon)${clrReset} ${CONSENSUS_BEACON_URL:+[$CONSENSUS_BEACON_URL]} " ans; CONSENSUS_BEACON_URL="${ans:-${CONSENSUS_BEACON_URL:-}}"
+  read -rp "${clrBold}$(tr ask_priv)${clrReset} ${VALIDATOR_PRIVATE_KEYS:+[***hidden***]} " ans; VALIDATOR_PRIVATE_KEYS="${ans:-${VALIDATOR_PRIVATE_KEYS:-}}"
+  read -rp "${clrBold}$(tr ask_coinbase)${clrReset} ${COINBASE:+[$COINBASE]} " ans; COINBASE="${ans:-${COINBASE:-}}"
   local autodetect_ip="$(curl -s https://ifconfig.me || true)" || true
   read -rp "${clrBold}$(tr ask_p2p)${clrReset} ${P2P_IP:+[$P2P_IP]} " ans; P2P_IP="${ans:-${P2P_IP:-$autodetect_ip}}"
+
+  local NET; NET="$(choose_network "$DEFAULT_NETWORK")"
 
   cat > "$ENV_FILE" <<EOF
 ETHEREUM_RPC_URL=${ETHEREUM_RPC_URL}
@@ -292,38 +374,15 @@ CONSENSUS_BEACON_URL=${CONSENSUS_BEACON_URL}
 VALIDATOR_PRIVATE_KEYS=${VALIDATOR_PRIVATE_KEYS}
 COINBASE=${COINBASE}
 P2P_IP=${P2P_IP}
+AZTEC_NETWORK=${NET}
 EOF
   ok "$(tr env_saved)"; hr
 
-  cat > "$COMPOSE_FILE" <<'YAML'
-services:
-  aztec-node:
-    container_name: aztec-sequencer
-    image: aztecprotocol/aztec:1.2.1
-    restart: unless-stopped
-    network_mode: host
-    environment:
-      ETHEREUM_HOSTS: ${ETHEREUM_RPC_URL}
-      L1_CONSENSUS_HOST_URLS: ${CONSENSUS_BEACON_URL}
-      DATA_DIRECTORY: /data
-      VALIDATOR_PRIVATE_KEYS: ${VALIDATOR_PRIVATE_KEYS}
-      COINBASE: ${COINBASE}
-      P2P_IP: ${P2P_IP}
-      LOG_LEVEL: info
-    entrypoint: >
-      sh -c 'node --no-warnings /usr/src/yarn-project/aztec/dest/bin/index.js start --network alpha-testnet --node --archiver --sequencer'
-    ports:
-      - 40400:40400/tcp
-      - 40400:40400/udp
-      - 8080:8080
-    volumes:
-      - /root/.aztec/alpha-testnet/data/:/data
-YAML
-  ok "$(tr compose_saved)"
+  write_compose "$DEFAULT_IMAGE_TAG" "$NET"
 }
 
 # -----------------------------
-# Start node
+# Start / restart / logs
 # -----------------------------
 start_node() {
   if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
@@ -332,54 +391,34 @@ start_node() {
   cd "$AZTEC_DIR"; info "$(tr starting)"; docker compose up -d; ok "$(tr started)"
 }
 
-# -----------------------------
-# Restart node (apply .env)
-# -----------------------------
 restart_node() {
   if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
     err "$(tr docker_missing)"; return 1
   fi
   cd "$AZTEC_DIR" || { err "Aztec dir not found"; return 1; }
-
-  info "$(tr restarting)"
-  docker compose up -d --force-recreate --no-deps aztec-node
-  ok "$(tr restarted)"
+  info "$(tr restarting)"; docker compose up -d --force-recreate --no-deps aztec-node; ok "$(tr restarted)"
 }
 
-# -----------------------------
-# Logs
-# -----------------------------
 show_logs() {
   if ! command -v docker >/dev/null 2>&1; then err "$(tr docker_missing)"; return 1; fi
   cd "$AZTEC_DIR"; info "$(tr logs_hint)"; docker compose logs -fn 1000
 }
 
 # -----------------------------
-# Sync status (Cerberus-Node)
+# Sync / RPC
 # -----------------------------
-run_sync_check() {
-  info "$(tr sync_running)"; bash <(curl -s https://raw.githubusercontent.com/cerberus-node/aztec-network/refs/heads/main/sync-check.sh)
-}
+run_sync_check() { info "$(tr sync_running)"; bash <(curl -s https://raw.githubusercontent.com/cerberus-node/aztec-network/refs/heads/main/sync-check.sh); }
+check_rpc_health() { info "$(tr rpc_running)"; run "bash <(curl -Ls https://raw.githubusercontent.com/DeepPatel2412/Aztec-Tools/main/RPC%20Health%20Check)"; }
 
 # -----------------------------
-# RPC Health Check
-# -----------------------------
-check_rpc_health() {
-  info "$(tr rpc_running)"; run "bash <(curl -Ls https://raw.githubusercontent.com/DeepPatel2412/Aztec-Tools/main/RPC%20Health%20Check)"
-}
-
-# -----------------------------
-# View Peer ID
+# Peer ID
 # -----------------------------
 view_peer_id() {
   if ! command -v docker >/dev/null 2>&1; then err "$(tr docker_missing)"; return 1; fi
   info "$(tr peerid_fetch)"
-  local cid
+  local cid pid
   cid=$(docker ps -q --filter "name=aztec" | head -1 || true)
-  if [[ -z "${cid:-}" ]]; then
-    warn "$(tr dir_missing): no running aztec container"; return 1
-  fi
-  local pid
+  [[ -z "${cid:-}" ]] && { warn "aztec container not running"; return 1; }
   pid=$(docker logs "$cid" 2>&1 | grep -m 1 -ai 'DiscV5 service started' | grep -o '"peerId":"[^"]*"' | cut -d'"' -f4 || true)
   if [[ -n "${pid:-}" ]]; then
     printf "%b%s%b %b%s%b\n" "$clrBold" "$(tr peerid_label)" "$clrReset" "$clrBlue" "$pid" "$clrReset"
@@ -388,8 +427,46 @@ view_peer_id() {
   fi
 }
 
+change_rpc_menu() {
+  if [[ ! -f "$ENV_FILE" ]]; then
+    warn "Файл .env не найден: $ENV_FILE"
+    return 1
+  fi
+  while true; do
+    clear; display_logo; hr
+    echo -e "${clrBold}${clrMag}$(tr rpc_menu_title)${clrReset}\n"
+    echo -e "${clrGreen}1)${clrReset} $(tr rpc_menu_1)"
+    echo -e "${clrGreen}2)${clrReset} $(tr rpc_menu_2)"
+    echo -e "${clrGreen}3)${clrReset} $(tr rpc_menu_back)"
+    hr
+    read -rp "> " sub
+    case "${sub:-}" in
+      1)
+        read -rp "$(tr rpc_eth_prompt) " NEWRPC
+        if [[ -z "${NEWRPC// }" ]]; then
+          warn "$(tr rpc_cancelled)"; echo -e "\n$(tr press_enter)"; read -r; continue
+        fi
+        update_env_var "ETHEREUM_RPC_URL" "$NEWRPC"
+        ok "$(tr rpc_updated)"; restart_node
+        echo -e "\n$(tr press_enter)"; read -r
+        ;;
+      2)
+        read -rp "$(tr rpc_beacon_prompt) " NEWB
+        if [[ -z "${NEWB// }" ]]; then
+          warn "$(tr rpc_cancelled)"; echo -e "\n$(tr press_enter)"; read -r; continue
+        fi
+        update_env_var "CONSENSUS_BEACON_URL" "$NEWB"
+        ok "$(tr rpc_updated)"; restart_node
+        echo -e "\n$(tr press_enter)"; read -r
+        ;;
+      3) break ;;
+      *) ;;
+    esac
+  done
+}
+
 # -----------------------------
-# Remove node, images & data (FULL)
+# Remove node
 # -----------------------------
 remove_node() {
   if [[ ! -d "$AZTEC_DIR" ]] && ! docker ps -a --format '{{.Names}}' | grep -q '^aztec-sequencer$'; then
@@ -400,6 +477,8 @@ remove_node() {
   if command -v docker >/dev/null 2>&1; then
     (cd "$AZTEC_DIR" 2>/dev/null && docker compose down -v --remove-orphans) || true
     docker ps -a --filter "name=aztec" -q | xargs -r docker rm -f || true
+    local IMG_IDS; IMG_IDS=$(docker images --format '{{.Repository}} {{.ID}}' | awk '$1=="aztecprotocol/aztec"{print $2}') || true
+    [[ -n "${IMG_IDS:-}" ]] && docker rmi -f ${IMG_IDS} || true
   fi
 
   if [[ -f "$ENV_FILE" ]]; then
@@ -409,31 +488,52 @@ remove_node() {
     fi
   fi
 
-  info "Removing aztec images..."
-  local IMG_IDS
-  IMG_IDS=$(docker images --format '{{.Repository}} {{.ID}}' | awk '$1=="aztecprotocol/aztec"{print $2}') || true
-  if [[ -n "${IMG_IDS:-}" ]]; then docker rmi -f ${IMG_IDS} || true; ok "Images removed"; else info "No aztec images found"; fi
+  local NET="testnet"
+  [[ -f "$ENV_FILE" ]] && NET="$(grep -E '^AZTEC_NETWORK=' "$ENV_FILE" | cut -d= -f2- || echo testnet)"
+  local DATA_DIR="$HOST_DATA_BASE/$NET/data"
+  [[ -d "$DATA_DIR" ]] && info "Removing data dir $DATA_DIR" && run "rm -rf '$DATA_DIR'"
 
-  if [[ -d "$HOST_DATA_DIR" ]]; then info "Removing data directory: $HOST_DATA_DIR"; run "rm -rf '$HOST_DATA_DIR'"; fi
   rm -rf "$AZTEC_DIR"; ok "$(tr removed_ok)"
 }
 
 # -----------------------------
-# Update node version (edit image tag)
+# Update node version + ask network
 # -----------------------------
 update_node_version() {
   if [[ ! -f "$COMPOSE_FILE" ]]; then err "$(tr compose_missing)"; return 1; fi
   cd "$AZTEC_DIR"; docker compose down || true; clear
-  read -rp "$(tr update_prompt) " TARGET; TARGET="${TARGET// /}"; [[ -z "$TARGET" ]] && { err "$(tr cancelled)"; return 1; }
-  if ! grep -qE '^[[:space:]]*image:[[:space:]]*aztecprotocol/aztec:' "$COMPOSE_FILE"; then err "$(tr compose_line_missing)"; return 1; fi
-  awk -v tag="$TARGET" '{ if ($0 ~ /^[[:space:]]*image:[[:space:]]*aztecprotocol\/aztec:/) { sub(/aztecprotocol\/aztec:[[:alnum:]._-]+/, "aztecprotocol/aztec:" tag) } print }' "$COMPOSE_FILE" > "$COMPOSE_FILE.tmp" && mv "$COMPOSE_FILE.tmp" "$COMPOSE_FILE"
-  info "Removing aztec images..."; local IMG_IDS; IMG_IDS=$(docker images --format '{{.Repository}} {{.ID}}' | awk '$1=="aztecprotocol/aztec"{print $2}') || true
+
+  # 1) спросить версию
+  read -rp "$(tr update_prompt_ver) " TARGET
+  TARGET="${TARGET//[$'\t\r\n ']/}"
+  [[ -z "$TARGET" ]] && TARGET="$DEFAULT_IMAGE_TAG"
+
+  # 2) спросить сеть
+  echo "$(tr update_prompt_net)"
+  read -rp "> " ans
+  case "${ans:-}" in
+    2|alpha|alpha-testnet) NET_SEL="alpha-testnet" ;;
+    ""|1|testnet) NET_SEL="testnet" ;;
+    *) NET_SEL="$DEFAULT_NETWORK" ;;
+  esac
+
+  # 3) перегенерируем compose из чистого шаблона
+  write_compose "$TARGET" "$NET_SEL"
+
+  # 4) чистим возможные мусорные байты и CRLF (на всякий)
+  sanitize_yaml "$COMPOSE_FILE"
+
+  # 5) сносим старые образы aztec и запускаем
+  info "Removing aztec images..."
+  local IMG_IDS; IMG_IDS=$(docker images --format '{{.Repository}} {{.ID}}' | awk '$1=="aztecprotocol/aztec"{print $2}') || true
   [[ -n "${IMG_IDS:-}" ]] && docker rmi -f ${IMG_IDS} || true
-  docker compose up -d; ok "$(tr update_done)"
+
+  docker compose up -d
+  ok "$(tr update_done)"
 }
 
 # -----------------------------
-# Show node version (from compose)
+# Show node version
 # -----------------------------
 show_node_version() {
   if [[ ! -f "$COMPOSE_FILE" ]]; then err "$(tr compose_missing)"; return 1; fi
@@ -464,6 +564,7 @@ main_menu() {
     echo -e "${clrGreen}5)${clrReset} $(tr m4_logs)"
     echo -e "${clrGreen}6)${clrReset} $(tr m5_sync)"
     echo -e "${clrGreen}7)${clrReset} $(tr m6_rpc)"
+    echo -e "${clrGreen}8)${clrReset} $(tr m12_rpcmenu)"
     echo -e "${clrGreen}8)${clrReset} $(tr m7_remove)"
     echo -e "${clrGreen}9)${clrReset} $(tr m8_update)"
     echo -e "${clrGreen}10)${clrReset} $(tr m9_showver)"
@@ -473,19 +574,20 @@ main_menu() {
     hr
     read -rp "> " choice
     case "${choice:-}" in
-      1) bootstrap_setup ;;
-      2) create_dir_and_env_and_compose ;;
+      1) update_and_deps ;;
+      2) create_dir_env_compose ;;
       3) start_node ;;
       4) restart_node ;;
       5) show_logs ;;
       6) run_sync_check ;;
       7) check_rpc_health ;;
-      8) remove_node ;;
-      9) update_node_version ;;
-      10) show_node_version ;;
-      11) view_peer_id ;;
-      12) choose_language ;;
-      13) exit 0 ;;
+      8) change_rpc_menu ;;
+      9) remove_node ;;
+      10) update_node_version ;;
+      11) show_node_version ;;
+      12) view_peer_id ;;
+      13) choose_language ;;
+      14) exit 0 ;;
       *) ;;
     esac
     echo -e "\n$(tr press_enter)"; read -r
