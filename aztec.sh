@@ -226,29 +226,12 @@ tr() {
 # -----------------------------
 need_sudo() {
   if [[ $(id -u) -ne 0 ]] && ! command -v sudo >/dev/null 2>&1; then
-    err "sudo не найден. запусти под root или поставь sudo."
+    err "sudo не найден. Запустите под root или установите sudo."
     exit 1
   fi
 }
-
-run() { if [[ $(id -u) -ne 0 ]]; then sudo bash -lc "$*"; else bash -lc "$*"; fi; }
-
-sanitize_yaml() {
-  local f="$1"
-  # убрать CRLF, затем выкинуть не-UTF8
-  sed -i 's/\r$//' "$f" || true
-  iconv -f utf-8 -t utf-8 -c "$f" -o "$f.tmp" && mv "$f.tmp" "$f"
-}
-
-choose_network() {
-  local def="${1:-$DEFAULT_NETWORK}"
-  echo -e "${clrBold}$(tr ask_network)${clrReset} [${def}]"
-  read -rp "> " ans
-  case "${ans:-}" in
-    2|alpha|alpha-testnet) echo "alpha-testnet" ;;
-    ""|1|testnet) echo "testnet" ;;
-    *) echo "$def" ;;
-  esac
+run() {
+  if [[ $(id -u) -ne 0 ]]; then sudo bash -lc "$*"; else bash -lc "$*"; fi
 }
 
 # -----------------------------
@@ -258,12 +241,12 @@ update_and_deps() {
   echo "$(tr root_enabled)"
   info "$(tr updating)"; run "apt-get update && apt-get upgrade -y"
   info "$(tr installing_deps)"
-  run "apt-get install -y curl iptables build-essential git wget lz4 jq make gcc nano automake autoconf tmux htop nvme-cli libgbm1 pkg-config libssl-dev libleveldb-dev tar clang bsdmainutils ncdu unzip ufw screen gawk iconv"
+  run "apt-get install -y curl iptables build-essential git wget lz4 jq make gcc nano automake autoconf tmux htop nvme-cli libgbm1 pkg-config libssl-dev libleveldb-dev tar clang bsdmainutils ncdu unzip ufw screen gawk"
   ok "$(tr deps_done)"
 }
 
 # -----------------------------
-# Docker
+# Docker install (engine + compose plugin)
 # -----------------------------
 install_docker() {
   info "$(tr docker_setup)"; need_sudo
@@ -280,7 +263,7 @@ install_docker() {
 }
 
 # -----------------------------
-# Firewall
+# Firewall (UFW)
 # -----------------------------
 setup_firewall() {
   info "$(tr ufw_setup)"; need_sudo
@@ -347,6 +330,22 @@ update_env_var() {
   fi
 }
 
+sanitize_yaml() {
+  [[ -f "$1" ]] && sed -i 's/\r$//' "$1"
+}
+
+choose_network() {
+  local def="${1:-testnet}" ans
+  { echo "$(tr ask_network)"; printf "> "; } >/dev/tty
+  IFS= read -r ans </dev/tty
+  ans="${ans//[$'\t\r\n ']/}"
+  case "${ans:-}" in
+    2|alpha|alpha-testnet) echo "alpha-testnet" ;;
+    ""|1|testnet)          echo "testnet" ;;
+    *)                     echo "$def" ;;
+  esac
+}
+
 # -----------------------------
 # Create dir, ask .env, write compose
 # -----------------------------
@@ -356,7 +355,11 @@ create_dir_env_compose() {
 
   local ETHEREUM_RPC_URL="" CONSENSUS_BEACON_URL="" VALIDATOR_PRIVATE_KEYS="" COINBASE="" P2P_IP=""
   if [[ -f "$ENV_FILE" ]]; then
-    set -a; source "$ENV_FILE" || true; set +a
+  while IFS= read -r line; do
+    [[ "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] || continue
+    key="${line%%=*}"; val="${line#*=}"
+    printf -v "$key" '%s' "$val"
+  done < "$ENV_FILE"
   fi
 
   read -rp "${clrBold}$(tr ask_eth_rpc)${clrReset} ${ETHEREUM_RPC_URL:+[$ETHEREUM_RPC_URL]} " ans; ETHEREUM_RPC_URL="${ans:-${ETHEREUM_RPC_URL:-}}"
@@ -565,12 +568,12 @@ main_menu() {
     echo -e "${clrGreen}6)${clrReset} $(tr m5_sync)"
     echo -e "${clrGreen}7)${clrReset} $(tr m6_rpc)"
     echo -e "${clrGreen}8)${clrReset} $(tr m12_rpcmenu)"
-    echo -e "${clrGreen}8)${clrReset} $(tr m7_remove)"
-    echo -e "${clrGreen}9)${clrReset} $(tr m8_update)"
-    echo -e "${clrGreen}10)${clrReset} $(tr m9_showver)"
-    echo -e "${clrGreen}11)${clrReset} $(tr m11_peerid)"
-    echo -e "${clrGreen}12)${clrReset} $(tr m10_lang)"
-    echo -e "${clrGreen}13)${clrReset} $(tr m11_exit)"
+    echo -e "${clrGreen}9)${clrReset} $(tr m7_remove)"
+    echo -e "${clrGreen}10)${clrReset} $(tr m8_update)"
+    echo -e "${clrGreen}11)${clrReset} $(tr m9_showver)"
+    echo -e "${clrGreen}12)${clrReset} $(tr m11_peerid)"
+    echo -e "${clrGreen}13)${clrReset} $(tr m10_lang)"
+    echo -e "${clrGreen}0)${clrReset} $(tr m11_exit)"
     hr
     read -rp "> " choice
     case "${choice:-}" in
@@ -587,7 +590,7 @@ main_menu() {
       11) show_node_version ;;
       12) view_peer_id ;;
       13) choose_language ;;
-      14) exit 0 ;;
+      0) exit 0 ;;
       *) ;;
     esac
     echo -e "\n$(tr press_enter)"; read -r
