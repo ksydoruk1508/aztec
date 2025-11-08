@@ -3,7 +3,7 @@
 #  Aztec Node — RU/EN interactive installer/runner (Docker-based)
 #  Uses the requested ASCII logo. Bilingual menus & prompts.
 #  Target: Ubuntu/Debian (apt). Requires sudo privileges for installs.
-#  Version: 1.5.0
+#  Version: 1.7.0
 # =====================================================================
 set -Eeuo pipefail
 
