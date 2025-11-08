@@ -116,6 +116,8 @@ tr() {
         m9_showver) echo "Show node version" ;;
         m11_peerid) echo "Show Peer ID" ;;
         m10_lang) echo "Change language" ;;
+        m13_show_eth_att) echo "Show Attester ETH private key" ;;
+        m14_show_bls_att) echo "Show Attester BLS private key" ;;
         m11_exit) echo "Exit" ;;
         press_enter) echo "Press Enter to return to menu..." ;;
         sync_running) echo "Running sync status..." ;;
@@ -186,6 +188,8 @@ tr() {
         m9_showver) echo "Показать версию" ;;
         m11_peerid) echo "Показать Peer ID" ;;
         m10_lang) echo "Сменить язык" ;;
+        m13_show_eth_att) echo "Показать приватный ключ Attester ETH" ;;
+        m14_show_bls_att) echo "Показать приватный ключ Attester BLS" ;;
         m11_exit) echo "Выход" ;;
         press_enter) echo "Enter для возврата в меню..." ;;
         sync_running) echo "Запускаю проверку синхронизации..." ;;
@@ -652,6 +656,39 @@ show_node_version() {
 }
 
 # -----------------------------
+# Attester keys (ETH / BLS)
+# -----------------------------
+show_attester_eth_key() {
+  local keyfile="$HOME/.aztec/keystore/key1.json"
+  if [[ ! -f "$keyfile" ]]; then
+    err "Keystore not found: $keyfile"
+    return 1
+  fi
+  local val
+  val="$(jq -r '.validators[0].attester.eth // empty' "$keyfile" 2>/dev/null || true)"
+  if [[ -z "${val:-}" || "$val" == "null" ]]; then
+    warn "ETH attester private key not found in $keyfile"
+  else
+    printf "%b%s%b %s\n" "$clrBold" "ETH attester private key:" "$clrReset" "$val"
+  fi
+}
+
+show_attester_bls_key() {
+  local keyfile="$HOME/.aztec/keystore/key1.json"
+  if [[ ! -f "$keyfile" ]]; then
+    err "Keystore not found: $keyfile"
+    return 1
+  fi
+  local val
+  val="$(jq -r '.validators[0].attester.bls // empty' "$keyfile" 2>/dev/null || true)"
+  if [[ -z "${val:-}" || "$val" == "null" ]]; then
+    warn "BLS attester private key not found in $keyfile"
+  else
+    printf "%b%s%b %s\n" "$clrBold" "BLS attester private key:" "$clrReset" "$val"
+  fi
+}
+
+# -----------------------------
 # Main menu
 # -----------------------------
 main_menu() {
@@ -672,7 +709,9 @@ main_menu() {
     echo -e "${clrGreen}10)${clrReset} $(tr m8_update)"
     echo -e "${clrGreen}11)${clrReset} $(tr m9_showver)"
     echo -e "${clrGreen}12)${clrReset} $(tr m11_peerid)"
-    echo -e "${clrGreen}13)${clrReset} $(tr m10_lang)"
+    echo -e "${clrGreen}13)${clrReset} $(tr m13_show_eth_att)"
+    echo -e "${clrGreen}14)${clrReset} $(tr m14_show_bls_att)"
+    echo -e "${clrGreen}15)${clrReset} $(tr m10_lang)"
     echo -e "${clrGreen}0)${clrReset} $(tr m11_exit)"
     hr
     read -rp "> " choice
@@ -689,7 +728,9 @@ main_menu() {
       10) update_node_version ;;
       11) show_node_version ;;
       12) view_peer_id ;;
-      13) choose_language ;;
+      13) show_attester_eth_key ;;
+      14) show_attester_bls_key ;;
+      15) choose_language ;;
       0) exit 0 ;;
       *) ;;
     esac
