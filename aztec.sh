@@ -46,7 +46,7 @@ hr()    { echo -e "${clrDim}─────────────────�
 # Config
 # -----------------------------
 SCRIPT_NAME="AztecNode"
-SCRIPT_VERSION="1.5.0"
+SCRIPT_VERSION="1.7.0"
 
 AZTEC_DIR="$HOME/aztec"
 ENV_FILE="$AZTEC_DIR/.env"
