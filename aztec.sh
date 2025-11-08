@@ -508,6 +508,11 @@ update_node_version() {
   is_eth_addr() { [[ "$1" =~ ^0x[0-9a-fA-F]{40}$ ]]; }
   is_hex64()    { [[ "$1" =~ ^0x[0-9a-fA-F]{64}$ ]]; }
   safe_src()    { set +u; [ -f "$HOME/.bashrc" ] && source "$HOME/.bashrc" 2>/dev/null || true; set -u; }
+  ensure_paths(){
+    safe_src
+    export PATH="$HOME/.aztec/bin:$PATH"
+    [ -x "$HOME/.foundry/bin" ] && export PATH="$HOME/.foundry/bin:$PATH"
+  }
 
   clear
   info "Останавливаю docker compose и чищу данные тестнета"
@@ -525,13 +530,14 @@ update_node_version() {
   info "Ставлю aztec-cli"
   run "bash -i <(curl -s https://install.aztec.network)"
   grep -q 'export PATH="$HOME/.aztec/bin:$PATH"' "$HOME/.bashrc" 2>/dev/null || echo 'export PATH="$HOME/.aztec/bin:$PATH"' >> "$HOME/.bashrc"
-  safe_src; export PATH="$HOME/.aztec/bin:$PATH"
+  ensure_paths
 
   hr
   info "Устанавливаю Foundry (cast, forge)"
   run "curl -L https://foundry.paradigm.xyz | bash"
-  safe_src; export PATH="$HOME/.foundry/bin:$PATH"
+  ensure_paths
   if [[ -x "$HOME/.foundry/bin/foundryup" ]]; then run "$HOME/.foundry/bin/foundryup"; else run "foundryup || true"; fi
+  ensure_paths
 
   hr
   echo -e "${clrBold}Введите PRIVATE_KEY_OF_OLD_SEQUENCER (0x...64)${clrReset}"
@@ -548,53 +554,60 @@ update_node_version() {
     --rpc-url https://sepolia.drpc.org"
 
   hr
-  # --- мягкий режим на чтение переменных и файлов ---
+  # ----------- КЛЮЧИ ATTESTER: авто-генерация/извлечение без вопросов -----------
   set +e
-
-  # восстановим ключ, если потерялся
   : "${PRIVATE_KEY_OF_OLD_SEQUENCER:=$(cat "$HOME/.aztec/.old_seq_pk" 2>/dev/null || true)}"
 
   KEYFILE="$HOME/.aztec/keystore/key1.json"
-  ENV_ETH_ADDR="$(sed -n 's/^ETH_ATTESTER_ADDRESS=//p' "$ENV_FILE" 2>/dev/null | tr -d '\r' | tail -n1)"
+  mkdir -p "$(dirname "$KEYFILE")"
   ENV_ETH_PRIV="$(sed -n 's/^ETH_ATTESTER_PRIVATE_KEY=//p' "$ENV_FILE" 2>/dev/null | tr -d '\r' | tail -n1)"
   ENV_BLS="$(sed -n 's/^BLS_ATTESTER_ADDRESS=//p' "$ENV_FILE" 2>/dev/null | tr -d '\r' | tail -n1)"
 
-  KS_ETH_PRIV=""; KS_BLS=""
+  KS_ETH_PRIV=""
+  KS_BLS=""
   if [ -f "$KEYFILE" ]; then
     KS_ETH_PRIV="$(jq -r '.validators[0].attester.eth // empty' "$KEYFILE" 2>/dev/null || true)"
-    KS_BLS="$(jq -r '.validators[0].attester.bls // empty' "$KEYFILE" 2>/dev/null || true)"
+    KS_BLS="$(jq -r  '.validators[0].attester.bls // empty' "$KEYFILE" 2>/dev/null || true)"
     [ "$KS_ETH_PRIV" = "null" ] && KS_ETH_PRIV=""
     [ "$KS_BLS" = "null" ] && KS_BLS=""
   fi
 
-  # если по ошибке в ENV_ETH_ADDR лежит приватник — трактуем как приватник
-  echo "$ENV_ETH_ADDR" | grep -Eq '^0x[0-9a-fA-F]{64}$' && { ENV_ETH_PRIV="$ENV_ETH_ADDR"; ENV_ETH_ADDR=""; }
-
-  # приоритет приватника: ENV -> KS -> запрос
-  ATTESTER_ETH_PRIV="$ENV_ETH_PRIV"
-  echo "$ATTESTER_ETH_PRIV" | grep -Eq '^0x[0-9a-fA-F]{64}$' || ATTESTER_ETH_PRIV="$KS_ETH_PRIV"
-  echo "$ATTESTER_ETH_PRIV" | grep -Eq '^0x[0-9a-fA-F]{64}$' || { read -rs -p "Введите приватный ключ ETH attester (0x...64): " ATTESTER_ETH_PRIV; echo; }
-
-  # адрес из приватника
-  ATTESTER_ETH_ADDR="$(cast wallet address --private-key "$ATTESTER_ETH_PRIV" 2>/dev/null | tail -n1)"
-
-  # BLS: ENV -> KS -> запрос
-  ATTESTER_BLS="$ENV_BLS"
-  echo "$ATTESTER_BLS" | grep -Eq '^0x[0-9a-fA-F]{64}$' || ATTESTER_BLS="$KS_BLS"
-  echo "$ATTESTER_BLS" | grep -Eq '^0x[0-9a-fA-F]{64}$' || { read -rs -p "Введите BLS secret (0x...64): " ATTESTER_BLS; echo; }
-
-  # возвращаем строгий режим
+  # Если ни в ENV, ни в KEYSTORE ничего нет — генерим
+  if ! echo "$ENV_ETH_PRIV" | grep -Eq '^0x[0-9a-fA-F]{64}$' && \
+     ! echo "$KS_ETH_PRIV"  | grep -Eq '^0x[0-9a-fA-F]{64}$' && \
+     ! echo "$ENV_BLS"      | grep -Eq '^0x[0-9a-fA-F]{64}$' && \
+     ! echo "$KS_BLS"       | grep -Eq '^0x[0-9a-fA-F]{64}$'; then
+    info "Генерирую attester ключи (aztec validator-keys new)"
+    aztec validator-keys new \
+      --fee-recipient 0x0000000000000000000000000000000000000000000000000000000000000000 >/dev/null
+    # перечитываем
+    if [ -f "$KEYFILE" ]; then
+      KS_ETH_PRIV="$(jq -r '.validators[0].attester.eth // empty' "$KEYFILE" 2>/dev/null || true)"
+      KS_BLS="$(jq -r  '.validators[0].attester.bls // empty' "$KEYFILE" 2>/dev/null || true)"
+      [ "$KS_ETH_PRIV" = "null" ] && KS_ETH_PRIV=""
+      [ "$KS_BLS" = "null" ] && KS_BLS=""
+    fi
+  fi
   set -e
 
-  # проверки
-  is_hex64 "${PRIVATE_KEY_OF_OLD_SEQUENCER:-}" || { err "PRIVATE_KEY_OF_OLD_SEQUENCER пуст"; return 1; }
-  is_eth_addr "$ATTESTER_ETH_ADDR" || { err "Неверный адрес ETH attester ($ATTESTER_ETH_ADDR)"; return 1; }
-  is_hex64 "$ATTESTER_BLS" || { err "Неверный BLS secret"; return 1; }
+  # Выбор значений: приоритет .env -> keystore
+  ATTESTER_ETH_PRIV="$ENV_ETH_PRIV"
+  if ! is_hex64 "$ATTESTER_ETH_PRIV"; then ATTESTER_ETH_PRIV="$KS_ETH_PRIV"; fi
+  if ! is_hex64 "$ATTESTER_ETH_PRIV"; then err "Не удалось получить ETH_ATTESTER_PRIVATE_KEY ни из $ENV_FILE, ни из $KEYFILE"; return 1; fi
 
-  # записываем в .env
+  ATTESTER_BLS="$ENV_BLS"
+  if ! is_hex64 "$ATTESTER_BLS"; then ATTESTER_BLS="$KS_BLS"; fi
+  if ! is_hex64 "$ATTESTER_BLS"; then err "Не удалось получить BLS секрет ни из $ENV_FILE, ни из $KEYFILE"; return 1; fi
+
+  # Адрес из приватника
+  ensure_paths
+  ATTESTER_ETH_ADDR="$(cast wallet address --private-key "$ATTESTER_ETH_PRIV" 2>/dev/null | tail -n1)"
+  if ! is_eth_addr "$ATTESTER_ETH_ADDR"; then err "Не удалось получить адрес из приватника ETH attester"; return 1; fi
+
+  # Сохраняем в .env
   update_env_var "ETH_ATTESTER_PRIVATE_KEY" "$ATTESTER_ETH_PRIV"
-  update_env_var "ETH_ATTESTER_ADDRESS" "$ATTESTER_ETH_ADDR"
-  update_env_var "BLS_ATTESTER_ADDRESS" "$ATTESTER_BLS"
+  update_env_var "ETH_ATTESTER_ADDRESS"     "$ATTESTER_ETH_ADDR"
+  update_env_var "BLS_ATTESTER_ADDRESS"     "$ATTESTER_BLS"
   ok "Сохранено в $ENV_FILE:"
   echo "  ETH_ATTESTER_ADDRESS=$ATTESTER_ETH_ADDR"
   echo "  ETH_ATTESTER_PRIVATE_KEY=(set)"
@@ -606,7 +619,7 @@ update_node_version() {
 
   echo -e "${clrBold}Введите ANY_ETH_ADDRESS (withdrawer)${clrReset}"
   read -r ANY_ETH_ADDRESS
-  is_eth_addr "$ANY_ETH_ADDRESS" || { err "Некорректный адрес withdrawer"; return 1; }
+  if ! is_eth_addr "$ANY_ETH_ADDRESS"; then err "Некорректный адрес withdrawer"; return 1; fi
 
   hr
   info "Регистрирую L1 валидатора"
@@ -623,6 +636,19 @@ update_node_version() {
   info "Запускаю контейнеры"
   run "cd ~/aztec && docker compose up -d"
   ok "$(tr update_done)"
+}
+
+show_node_version() {
+  if [[ ! -f "$COMPOSE_FILE" ]]; then
+    err "$(tr compose_missing)"; return 1
+  fi
+  local tag
+  tag="$(grep -E '^\s*image:\s*aztecprotocol/aztec:' "$COMPOSE_FILE" | sed -E 's/.*aztec:([[:alnum:]._-]+).*/\1/')"
+  if [[ -n "$tag" ]]; then
+    echo "$(tr current_version) $tag"
+  else
+    echo "$(tr current_version) $(tr not_found)"
+  fi
 }
 
 # -----------------------------
