@@ -500,55 +500,129 @@ remove_node() {
 }
 
 # -----------------------------
-# Update node version + ask network
+# Update node version (hardened after-approve)
 # -----------------------------
 update_node_version() {
   if [[ ! -f "$COMPOSE_FILE" ]]; then err "$(tr compose_missing)"; return 1; fi
-  cd "$AZTEC_DIR"; docker compose down || true; clear
 
-  # 1) спросить версию
-  read -rp "$(tr update_prompt_ver) " TARGET
-  TARGET="${TARGET//[$'\t\r\n ']/}"
-  [[ -z "$TARGET" ]] && TARGET="$DEFAULT_IMAGE_TAG"
+  is_eth_addr() { [[ "$1" =~ ^0x[0-9a-fA-F]{40}$ ]]; }
+  is_hex64()    { [[ "$1" =~ ^0x[0-9a-fA-F]{64}$ ]]; }
+  safe_src()    { set +u; [ -f "$HOME/.bashrc" ] && source "$HOME/.bashrc" 2>/dev/null || true; set -u; }
 
-  # 2) спросить сеть
-  echo "$(tr update_prompt_net)"
-  read -rp "> " ans
-  case "${ans:-}" in
-    2|alpha|alpha-testnet) NET_SEL="alpha-testnet" ;;
-    ""|1|testnet) NET_SEL="testnet" ;;
-    *) NET_SEL="$DEFAULT_NETWORK" ;;
-  esac
+  clear
+  info "Останавливаю docker compose и чищу данные тестнета"
+  run "cd ~/aztec && docker compose down || true"
+  run "rm -rf /root/.aztec/testnet/data"
 
-  # 3) перегенерируем compose из чистого шаблона
-  write_compose "$TARGET" "$NET_SEL"
+  info "Фиксирую образ и сеть в docker-compose.yml"
+  run "cd ~/aztec && sed -i 's|^ *image: aztecprotocol/aztec:.*|    image: aztecprotocol/aztec:2.1.2|' docker-compose.yml"
+  run "cd ~/aztec && sed -i 's|--network alpha-testnet|--network testnet|g' docker-compose.yml"
 
-  # 4) чистим возможные мусорные байты и CRLF (на всякий)
-  sanitize_yaml "$COMPOSE_FILE"
+  info "Подтягиваю свежие образы"
+  run "cd ~/aztec && docker compose pull"
 
-  # 5) сносим старые образы aztec и запускаем
-  info "Removing aztec images..."
-  local IMG_IDS; IMG_IDS=$(docker images --format '{{.Repository}} {{.ID}}' | awk '$1=="aztecprotocol/aztec"{print $2}') || true
-  [[ -n "${IMG_IDS:-}" ]] && docker rmi -f ${IMG_IDS} || true
+  hr
+  info "Ставлю aztec-cli"
+  run "bash -i <(curl -s https://install.aztec.network)"
+  grep -q 'export PATH="$HOME/.aztec/bin:$PATH"' "$HOME/.bashrc" 2>/dev/null || echo 'export PATH="$HOME/.aztec/bin:$PATH"' >> "$HOME/.bashrc"
+  safe_src; export PATH="$HOME/.aztec/bin:$PATH"
 
-  docker compose up -d
-  ok "$(tr update_done)"
-}
+  hr
+  info "Устанавливаю Foundry (cast, forge)"
+  run "curl -L https://foundry.paradigm.xyz | bash"
+  safe_src; export PATH="$HOME/.foundry/bin:$PATH"
+  if [[ -x "$HOME/.foundry/bin/foundryup" ]]; then run "$HOME/.foundry/bin/foundryup"; else run "foundryup || true"; fi
 
-# -----------------------------
-# Show node version
-# -----------------------------
-show_node_version() {
-  if [[ ! -f "$COMPOSE_FILE" ]]; then err "$(tr compose_missing)"; return 1; fi
-  local TAG
-  TAG=$(grep -E 'image:[[:space:]]*aztecprotocol/aztec:' "$COMPOSE_FILE" \
-        | sed -E 's/.*aztecprotocol\/aztec:([[:alnum:]._-]+).*/\1/' \
-        | head -n1 || true)
-  if [[ -n "${TAG:-}" ]]; then
-    printf "%b%s%b %b%s%b\n" "$clrBold" "$(tr current_version)" "$clrReset" "$clrBlue" "$TAG" "$clrReset"
-  else
-    echo "$(tr current_version) $(tr not_found)"
+  hr
+  echo -e "${clrBold}Введите PRIVATE_KEY_OF_OLD_SEQUENCER (0x...64)${clrReset}"
+  read -rs PRIVATE_KEY_OF_OLD_SEQUENCER; echo
+  if ! is_hex64 "${PRIVATE_KEY_OF_OLD_SEQUENCER:-}"; then err "Нужен приватный ключ формата 0x...64"; return 1; fi
+  mkdir -p "$HOME/.aztec"; printf "%s" "$PRIVATE_KEY_OF_OLD_SEQUENCER" > "$HOME/.aztec/.old_seq_pk"
+  export PRIVATE_KEY_OF_OLD_SEQUENCER
+
+  info "Делаю approve на контракте SequencerRegistry"
+  run "cast send 0x139d2a7a0881e16332d7D1F8DB383A4507E1Ea7A \
+    'approve(address,uint256)' \
+    0xebd99ff0ff6677205509ae73f93d0ca52ac85d67 200000ether \
+    --private-key \"$PRIVATE_KEY_OF_OLD_SEQUENCER\" \
+    --rpc-url https://sepolia.drpc.org"
+
+  hr
+  # --- мягкий режим на чтение переменных и файлов ---
+  set +e
+
+  # восстановим ключ, если потерялся
+  : "${PRIVATE_KEY_OF_OLD_SEQUENCER:=$(cat "$HOME/.aztec/.old_seq_pk" 2>/dev/null || true)}"
+
+  KEYFILE="$HOME/.aztec/keystore/key1.json"
+  ENV_ETH_ADDR="$(sed -n 's/^ETH_ATTESTER_ADDRESS=//p' "$ENV_FILE" 2>/dev/null | tr -d '\r' | tail -n1)"
+  ENV_ETH_PRIV="$(sed -n 's/^ETH_ATTESTER_PRIVATE_KEY=//p' "$ENV_FILE" 2>/dev/null | tr -d '\r' | tail -n1)"
+  ENV_BLS="$(sed -n 's/^BLS_ATTESTER_ADDRESS=//p' "$ENV_FILE" 2>/dev/null | tr -d '\r' | tail -n1)"
+
+  KS_ETH_PRIV=""; KS_BLS=""
+  if [ -f "$KEYFILE" ]; then
+    KS_ETH_PRIV="$(jq -r '.validators[0].attester.eth // empty' "$KEYFILE" 2>/dev/null || true)"
+    KS_BLS="$(jq -r '.validators[0].attester.bls // empty' "$KEYFILE" 2>/dev/null || true)"
+    [ "$KS_ETH_PRIV" = "null" ] && KS_ETH_PRIV=""
+    [ "$KS_BLS" = "null" ] && KS_BLS=""
   fi
+
+  # если по ошибке в ENV_ETH_ADDR лежит приватник — трактуем как приватник
+  echo "$ENV_ETH_ADDR" | grep -Eq '^0x[0-9a-fA-F]{64}$' && { ENV_ETH_PRIV="$ENV_ETH_ADDR"; ENV_ETH_ADDR=""; }
+
+  # приоритет приватника: ENV -> KS -> запрос
+  ATTESTER_ETH_PRIV="$ENV_ETH_PRIV"
+  echo "$ATTESTER_ETH_PRIV" | grep -Eq '^0x[0-9a-fA-F]{64}$' || ATTESTER_ETH_PRIV="$KS_ETH_PRIV"
+  echo "$ATTESTER_ETH_PRIV" | grep -Eq '^0x[0-9a-fA-F]{64}$' || { read -rs -p "Введите приватный ключ ETH attester (0x...64): " ATTESTER_ETH_PRIV; echo; }
+
+  # адрес из приватника
+  ATTESTER_ETH_ADDR="$(cast wallet address --private-key "$ATTESTER_ETH_PRIV" 2>/dev/null | tail -n1)"
+
+  # BLS: ENV -> KS -> запрос
+  ATTESTER_BLS="$ENV_BLS"
+  echo "$ATTESTER_BLS" | grep -Eq '^0x[0-9a-fA-F]{64}$' || ATTESTER_BLS="$KS_BLS"
+  echo "$ATTESTER_BLS" | grep -Eq '^0x[0-9a-fA-F]{64}$' || { read -rs -p "Введите BLS secret (0x...64): " ATTESTER_BLS; echo; }
+
+  # возвращаем строгий режим
+  set -e
+
+  # проверки
+  is_hex64 "${PRIVATE_KEY_OF_OLD_SEQUENCER:-}" || { err "PRIVATE_KEY_OF_OLD_SEQUENCER пуст"; return 1; }
+  is_eth_addr "$ATTESTER_ETH_ADDR" || { err "Неверный адрес ETH attester ($ATTESTER_ETH_ADDR)"; return 1; }
+  is_hex64 "$ATTESTER_BLS" || { err "Неверный BLS secret"; return 1; }
+
+  # записываем в .env
+  update_env_var "ETH_ATTESTER_PRIVATE_KEY" "$ATTESTER_ETH_PRIV"
+  update_env_var "ETH_ATTESTER_ADDRESS" "$ATTESTER_ETH_ADDR"
+  update_env_var "BLS_ATTESTER_ADDRESS" "$ATTESTER_BLS"
+  ok "Сохранено в $ENV_FILE:"
+  echo "  ETH_ATTESTER_ADDRESS=$ATTESTER_ETH_ADDR"
+  echo "  ETH_ATTESTER_PRIVATE_KEY=(set)"
+  echo "  BLS_ATTESTER_ADDRESS=$ATTESTER_BLS"
+
+  hr
+  echo -e "${clrYellow}Важно:${clrReset} пополните ${clrBold}$ATTESTER_ETH_ADDR${clrReset} на 0.2–0.5 ETH в сети Sepolia."
+  read -rp "Когда пополнили — Enter для продолжения..." _
+
+  echo -e "${clrBold}Введите ANY_ETH_ADDRESS (withdrawer)${clrReset}"
+  read -r ANY_ETH_ADDRESS
+  is_eth_addr "$ANY_ETH_ADDRESS" || { err "Некорректный адрес withdrawer"; return 1; }
+
+  hr
+  info "Регистрирую L1 валидатора"
+  run "aztec add-l1-validator \
+    --l1-rpc-urls https://sepolia.drpc.org \
+    --network testnet \
+    --private-key \"$PRIVATE_KEY_OF_OLD_SEQUENCER\" \
+    --attester \"$ATTESTER_ETH_ADDR\" \
+    --withdrawer \"$ANY_ETH_ADDRESS\" \
+    --bls-secret-key \"$ATTESTER_BLS\" \
+    --rollup 0xebd99ff0ff6677205509ae73f93d0ca52ac85d67"
+
+  hr
+  info "Запускаю контейнеры"
+  run "cd ~/aztec && docker compose up -d"
+  ok "$(tr update_done)"
 }
 
 # -----------------------------
